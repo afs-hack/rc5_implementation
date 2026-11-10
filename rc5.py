@@ -16,56 +16,15 @@ def bit_add(a, b):
     x.pop(0)
     return x
 
-def encrypt(w, r, b):
-    #Size of s_table
-    t = 2 * (r+1)
-    #Generate key of size b bytes
-    key = random.randint(1,pow(2,(8*b))-1)
-    key = bitarray(bin(key)[2:])
-    if len(key) < (8*b):
-        remainder = (8*b) - len(key)
-        key = bitarray('0'*remainder) + key
-    #Generate S_Table
-    s_table = s_table(w, r, b, key)
-    #Take Message as input and convert into bitarray
-    message = butil.hex2ba(input("Write message here:\n").encode("utf-8"))
-    message.fill(m=w)
-    #Turn message into an array of words
-    m_arr = []
-    for i in range(int(len(message)/w)):
-        m_arr.append(message[i*w:(i+1)*w])
-    #Encrypt all words in message
-    c_arr = []
-    for i in range(t, step=2):
-        A = bit_add(m_arr[i], s_table[0])
-        B = bit_add(m_arr[i+1], s_table[i])
-        for j in range(1,r+1):
-            A = A ^ B
-            A.rotate(butil.ba2int(B) % w)
-            A = bit_add(A, s_table[2 * j])
-            B = A ^ B
-            B.rotate(butil.ba2int(A) % w)
-            B = bit_add(B, s_table[2 * j + 1])
-        c_arr.append(A)
-        c_arr.append(B)
-    cipher = []
-    #Convert words back into string
-    for c in c_arr:
-        cipher += c
-    cipher = butil.ba2hex(cipher).decode("utf-8")
-    key = butil.ba2hex(key).decode("utf-8")
-    print(f"Key is:\n {key}")
-    print(f"Ciphertext is:\n{cipher}")
-    return cipher, key
+def bit_sub(a, b):
+    one = bitarray('0' * (len(b) - 1) + '1')
+    return bit_add(a, bit_add(~b, one))
 
-    
-
-def decrypt(w, r, b, cipher, key):
-    if cipher == "":
-        cipher = input("Input Ciphertext Here:\n")
-    if key == "":
-        key = input("Input Key Here\n")
-    
+def odd(num):
+    odd = round(num)
+    if odd % 2 == 0:
+        odd += 1
+    return odd
 
 def s_table(w, r, b, key):
     t = 2 * (r+1)
@@ -101,14 +60,93 @@ def s_table(w, r, b, key):
         B.rotate(butil.ba2int(bit_add(A,B)) % w), l[j].rotate(butil.ba2int(bit_add(A,B)) % w)
         i = (i + 1) % t
         j = (j + 1) % c
+    return s
 
+def encrypt(w, r, b):
+    #Size of s_table
+    t = 2 * (r+1)
+    #Generate key of size b bytes
+    key = random.randint(1,pow(2,(8*b))-1)
+    key = bitarray(bin(key)[2:])
+    if len(key) < (8*b):
+        remainder = (8*b) - len(key)
+        key = bitarray('0'*remainder) + key
+    #Generate S_Table
+    s = s_table(w, r, b, key)
+    #Take Message as input and convert into bitarray
+    message = butil.hex2ba(input("Write message here:\n").encode("utf-8").hex())
+    message.fill(m=w)
+    #Turn message into an array of words
+    m_arr = []
+    for i in range(int(len(message)/w)):
+        m_arr.append(message[i*w:(i+1)*w])
+    #Encrypt all words in message
+    c_arr = []
+    for i in range(len(m_arr)-1):
+        A = bit_add(m_arr[i], s[0])
+        B = bit_add(m_arr[i+1], s[1])
+        for j in range(1,r+1):
+            A = A ^ B
+            A.rotate((butil.ba2int(B) % w) * -1)
+            A = bit_add(A, s[2 * j])
+            B = A ^ B
+            B.rotate((butil.ba2int(A) % w) * -1)
+            B = bit_add(B, s[2 * j + 1])
+        c_arr.append(A)
+        if i == (len(m_arr) - 2):
+            c_arr.append(B)
+        m_arr[i+1] = B
+    cipher = []
+    #Convert words back into string
+    for c in c_arr:
+        cipher += c
+    cipher = butil.ba2hex(cipher).decode("utf-8")
+    key = butil.ba2hex(key).decode("utf-8")
+    print(f"Key is:\n {key}")
+    print(f"Ciphertext is:\n{cipher}")
+    return cipher, key
 
+    
 
-def odd(num):
-    odd = round(num)
-    if odd % 2 == 0:
-        odd += 1
-    return odd
+def decrypt(w, r, b, cipher, key):
+    if cipher == "":
+        cipher = input("Input Ciphertext Here:\n")
+    if key == "":
+        key = input("Input Key Here\n")
+    t = 2 * (r + 1)
+    #Conver cipher and key to bitarrays
+    cipher = bitarray(cipher.encode("utf-8").hex())
+    key = bitarray(key.encode("utf-8").hex())
+    #Generate s_table
+    s = s_table(w, r, b, key)
+    #convert cipher into and array of words
+    c_arr = []
+    for i in range(int(len(cipher)/w)):
+        c_arr.append(cipher[i*w:(i+1)*w])
+    m_arr = []
+    for i in range(len(c_arr)-2, -1, -1):
+        B = c_arr[i+1]
+        A = c_arr[i]
+        for j in range(r, 0, -1):
+            B = bit_sub(B, s[2 * j + 1])
+            B.rotate(butil.ba2int(A) % w)
+            B = B ^ A
+            A = bit_sub(A, s[2 * j])
+            A.rotate(butil.ba2int(B) % w)
+            A = A ^ B
+        B = bit_sub(B, s[1])
+        A = bit_sub(A, s[0])
+        m_arr.insert(0,B)
+        if i == 0:
+            m_arr.insert(0,A)
+        c_arr[i] = A
+    message = []
+    for m in m_arr:
+        message += m
+    message = butil.ba2hex(message).decode("utf-8")
+    print(f"Message is:\n {message}")
+    return message
+
 
 def demo(w, r, b):
     cipher, key = encrypt(w, r, b)
@@ -117,9 +155,9 @@ def demo(w, r, b):
 if __name__ == "__main__":
     if len(sys.argv) < 4:
         sys.exit("user must define world length in bits(w), rounds(r), and key size in bytes(b)")
-    w = sys.argv[1]
-    r = sys.argv[2]
-    b = sys.argv[3]
+    w = int(sys.argv[1])
+    r = int(sys.argv[2])
+    b = int(sys.argv[3])
     while True:
         menu = input("Select Mode:\n" \
         "1) Encrypt Message\n" \
