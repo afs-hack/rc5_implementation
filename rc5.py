@@ -29,22 +29,17 @@ def odd(num):
 def s_table(w, r, b, key):
     t = 2 * (r+1)
     u = w/8
-    c = math.ceil(b/u)
+    c = max(1, math.ceil(b/u))
     e = math.e
     phi = (1 + math.sqrt(5)) / 2
     p = odd((e - 2)*(pow(2,w)))
     q = odd((phi - 1)*(pow(2,w)))
 
     #Convert the Key from Bytes to words
+    padded_key = butil.zeros(c*w - len(key)) + key
     l = []
     for i in range(c):
-        if w*(i+1) > len(key):
-            remainder = w*(i+1) - len(key)
-            last_word = bitarray('0'*remainder)
-            last_word.extend(key[-len(key):-w*i])
-            l.append(last_word)
-        else:
-            l.append(bitarray(key[-w*(1+i):-w*i or None]))
+        l.append(padded_key[-w*(1+i):-w*i or None])
     #Initialize S
     s = []
     s.append(bitarray(bin(p)[2:]))
@@ -54,10 +49,13 @@ def s_table(w, r, b, key):
     i = j = 0
     A = B = bitarray('0'*w)
     for times in range(3 * max(t,c)):
-        A = s[i] = (bit_add(s[i], bit_add(A,B)))
-        A.rotate(3), s[i].rotate(3)
-        B = l[j] = (bit_add(l[j], bit_add(A,B)))
-        B.rotate(butil.ba2int(bit_add(A,B)) % w), l[j].rotate(butil.ba2int(bit_add(A,B)) % w)
+        A = (bit_add(s[i], bit_add(A,B)))
+        A.rotate(-3)
+        s[i] = A
+        rot_amt = (butil.ba2int(bit_add(A, B)) % w) * -1
+        B = (bit_add(l[j], bit_add(A, B)))
+        B.rotate(rot_amt)
+        l[j] = B
         i = (i + 1) % t
         j = (j + 1) % c
     return s
@@ -74,15 +72,16 @@ def encrypt(w, r, b):
     #Generate S_Table
     s = s_table(w, r, b, key)
     #Take Message as input and convert into bitarray
-    message = butil.hex2ba(input("Write message here:\n").encode("utf-8").hex())
-    message.fill(m=w)
+    message = bitarray()
+    message.frombytes(input("Write message here:\n").encode("utf-8"))
+    message.fill(2*w)
     #Turn message into an array of words
     m_arr = []
     for i in range(int(len(message)/w)):
         m_arr.append(message[i*w:(i+1)*w])
     #Encrypt all words in message
     c_arr = []
-    for i in range(len(m_arr)-1):
+    for i in range(0, len(m_arr)-1, 2):
         A = bit_add(m_arr[i], s[0])
         B = bit_add(m_arr[i+1], s[1])
         for j in range(1,r+1):
@@ -93,16 +92,14 @@ def encrypt(w, r, b):
             B.rotate((butil.ba2int(A) % w) * -1)
             B = bit_add(B, s[2 * j + 1])
         c_arr.append(A)
-        if i == (len(m_arr) - 2):
-            c_arr.append(B)
-        m_arr[i+1] = B
-    cipher = []
+        c_arr.append(B)
+    cipher = bitarray()
     #Convert words back into string
     for c in c_arr:
         cipher += c
-    cipher = butil.ba2hex(cipher).decode("utf-8")
-    key = butil.ba2hex(key).decode("utf-8")
-    print(f"Key is:\n {key}")
+    cipher = butil.ba2hex(cipher)
+    key = butil.ba2hex(key)
+    print(f"Key is:\n{key}")
     print(f"Ciphertext is:\n{cipher}")
     return cipher, key
 
@@ -114,9 +111,9 @@ def decrypt(w, r, b, cipher, key):
     if key == "":
         key = input("Input Key Here\n")
     t = 2 * (r + 1)
-    #Conver cipher and key to bitarrays
-    cipher = bitarray(cipher.encode("utf-8").hex())
-    key = bitarray(key.encode("utf-8").hex())
+    #Convert cipher and key to bitarrays
+    cipher = butil.hex2ba(cipher)
+    key = butil.hex2ba(key)
     #Generate s_table
     s = s_table(w, r, b, key)
     #convert cipher into and array of words
@@ -124,7 +121,7 @@ def decrypt(w, r, b, cipher, key):
     for i in range(int(len(cipher)/w)):
         c_arr.append(cipher[i*w:(i+1)*w])
     m_arr = []
-    for i in range(len(c_arr)-2, -1, -1):
+    for i in range(0, len(c_arr) - 1, 2):
         B = c_arr[i+1]
         A = c_arr[i]
         for j in range(r, 0, -1):
@@ -137,14 +134,12 @@ def decrypt(w, r, b, cipher, key):
         B = bit_sub(B, s[1])
         A = bit_sub(A, s[0])
         m_arr.insert(0,B)
-        if i == 0:
-            m_arr.insert(0,A)
-        c_arr[i] = A
-    message = []
+        m_arr.insert(0,A)
+    message = bitarray()
     for m in m_arr:
         message += m
-    message = butil.ba2hex(message).decode("utf-8")
-    print(f"Message is:\n {message}")
+    message = message.tobytes().rstrip(b"\x00").decode("utf-8")
+    print(f"Message is:\n{message}")
     return message
 
 
