@@ -148,11 +148,15 @@ def demo(w, r, b):
     decrypt(w, r, b, cipher, key)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        sys.exit("user must define world length in bits(w), rounds(r), and key size in bytes(b)")
-    w = int(sys.argv[1])
-    r = int(sys.argv[2])
-    b = int(sys.argv[3])
+    if len(sys.argv) == 4:
+        w = int(sys.argv[1])
+        r = int(sys.argv[2])
+        b = int(sys.argv[3])
+    else:
+        print("Using default values 32/16/7\n")
+        w = 32
+        r = 16
+        b = 7
     while True:
         menu = input("Select Mode:\n" \
         "1) Encrypt Message\n" \
